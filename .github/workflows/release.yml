@@ -12,7 +12,7 @@ on:
 env:
   CSPROJ_FILEPATH: './GoeaLabs.Bedrock/GoeaLabs.Bedrock.csproj'
   PACKAGE_LIBRARY: 'true'
-  PUBLISH_PACKAGE: 'false'
+  PUBLISH_PACKAGE: 'true'
   PUBLISH_RELEASE: 'true'
   NO_CHANGES_TEXT: '- no changes'
   BUILD_CHANGELOG: './.config/release.md'
