@@ -1,0 +1,95 @@
+﻿name: Release
+
+on:
+  # Enable manual triggering
+  workflow_dispatch:
+
+  push:
+    # Limit the run to release tags
+    tags:
+      - "v*.*.*"
+
+env:
+  CSPROJ_FILEPATH: './GoeaLabs.Bedrock/GoeaLabs.Bedrock.csproj'
+  PACKAGE_LIBRARY: 'true'
+  PUBLISH_PACKAGE: 'false'
+  PUBLISH_RELEASE: 'true'
+  NO_CHANGES_TEXT: '- no changes'
+  BUILD_CHANGELOG: './.config/release.md'
+  RELEASE_CONFIG: './.config/release.json'
+  RELEASE_URL: 'https://github.com/goealabs/dotnet-bedrock/releases/tag/${{ github.ref_name }}'
+
+jobs:
+
+  test:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    uses: ./.github/workflows/test.yml
+
+  analyze:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    uses: ./.github/workflows/codeql.yml
+
+  release:
+    runs-on: ubuntu-22.04
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs: [test, analyze]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 7.0.x
+
+      - name: Make CHANGELOG
+        uses: mikepenz/release-changelog-builder-action@v3.4.0
+        id: make_changelog
+        with:
+          failOnError: true
+          configuration: ${{ env.RELEASE_CONFIG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Edit CHANGELOG
+        run: |
+          if ('${{ steps.make_changelog.outputs.changelog }}' -NotMatch '${{ env.NO_CHANGES_TEXT }}') {
+              '${{ steps.make_changelog.outputs.changelog }}' | Set-Content -Path ${{ env.BUILD_CHANGELOG }}
+          }
+        shell: pwsh
+
+      - name: Inject CHANGELOG
+        run: |
+          ((Get-Content -Path ${{ env.CSPROJ_FILEPATH }} -Raw) -replace '<!--CHANGELOG-->', '${{ env.RELEASE_URL }}') | Set-Content -Path ${{ env.CSPROJ_FILEPATH }}
+        shell: pwsh
+
+      - name: Extract version
+        id: extract_version
+        run: |
+          $version = "${{ steps.make_changelog.outputs.toTag }}".TrimStart("v")
+          echo "version=$version" >> $Env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Build
+        run: dotnet build -c Release -p:ContinuousIntegrationBuild=true -p:version=${{ steps.extract_version.outputs.version }}
+
+      # No need to test we've done that already in the test job
+
+      - name: Package
+        if: ${{ env.PACKAGE_LIBRARY == 'true' }}
+        run: dotnet pack -c Release --no-build -p:version=${{ steps.extract_version.outputs.version }}
+
+      - name: Publish Package
+        if: ${{ env.PUBLISH_PACKAGE == 'true' }}
+        run: dotnet nuget push /**/*.nupkg --skip-duplicate --api-key ${{ secrets.GOEALABS_NUGET_KEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Publish Release
+        if: ${{ env.PUBLISH_RELEASE == 'true' }}
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          name: ${{ steps.make_changelog.outputs.toTag }}
+          prerelease: ${{ contains(steps.make_changelog.outputs.toTag, '-') || startsWith(steps.make_changelog.outputs.toTag, 'v0') }}
+          body_path: ${{ env.BUILD_CHANGELOG }}
+          files: |
+            ./**/*.nupkg
+            ./**/*.snupkg
+            #${{ env.BUILD_CHANGELOG }}

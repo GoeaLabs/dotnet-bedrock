@@ -1,0 +1,22 @@
+{
+  "template": "${{CHANGELOG}}",
+  "pr_template": "- PR #${{NUMBER}} - ${{TITLE}}",
+  "categories": [
+    {
+      "title": "#### MAJOR CHANGES",
+      "labels": [ "changelog-major" ],
+      "empty_content": "- None"
+    },
+    {
+      "title": "#### MINOR CHANGES",
+      "labels": [ "changelog-minor" ],
+      "empty_content": "- None"
+    },
+    {
+      "title": "#### PATCH CHANGES",
+      "labels": [ "changelog-patch" ],
+      "empty_content": "- None"
+    }
+  ],
+  "ignore_labels": [ "changelog-evade" ]
+}
